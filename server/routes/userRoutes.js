@@ -13,8 +13,7 @@ async function userRoutes(fastify) {
       const offset = (page - 1) * pageSize;
 
       // 查询总数
-      const [countRows] = await fastify.db.execute(`SELECT COUNT(*) as total FROM zn_users u
-      INNER JOIN zn_user_roles ur ON u.id = ur.user_id WHERE ur.role_id = ?`, [Number(role_id)]);
+      const [countRows] = await fastify.db.execute(`SELECT COUNT(*) as total FROM {{users}}`);
       const total = countRows[0].total;
       // 查询分页数据
       const [rows] = await fastify.db.execute(`
@@ -26,13 +25,11 @@ async function userRoutes(fastify) {
             u.position,
             u.department,
             u.created_at,
+            r.id as role_id,
             r.role_name,
-            r.role_description,
-            u.office_location
-        FROM zn_users u
-                 INNER JOIN zn_user_roles ur ON u.id = ur.user_id
-                 INNER JOIN zn_roles r ON ur.role_id = r.id
-        WHERE ur.role_id = ?
+            r.role_description
+        FROM {{users}} u
+                 INNER JOIN {{roles}} r ON u.role_id = r.id
         ORDER BY u.id DESC
             LIMIT ${pageSize} OFFSET ${offset}
     `, [Number(role_id)]);
@@ -54,15 +51,14 @@ async function userRoutes(fastify) {
   //  创建用户
   fastify.post('/addUser', async function (request, reply) {
     try {
-      const { username, nickname, password, status, position, department, office_location, role_id } = request.body;
-      // console.log('查看添加人员的报错============', request.body)
+      const { username, nickname, password, status, position, department, role_id } = request.body;
 
       // 简单校验
       if (!username || !nickname || !password) {
         return reply.send({ code: 400, message: '用户名/昵称/密码不能为空', data: null })
       }
 
-      const rows = await fastify.db.execute(`SELECT username FROM zn_users WHERE username = ?`, [username]);
+      const rows = await fastify.db.execute(`SELECT username FROM {{users}} WHERE username = ?`, [username]);
       if (rows.username === username) {
         return reply.send({ code: 400, message: '用户已存在', data: null })
       }
@@ -70,26 +66,25 @@ async function userRoutes(fastify) {
       // 1. 加密密码
       const hashedPassword = await fastify.hashPassword(password);
 
-      const sql = `INSERT INTO zn_users (nickname, username, password, status, position, department, office_location, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`;
-      const [result] = await fastify.db.execute(sql, [nickname, username, hashedPassword, status, position, department, office_location]);
+      const sql = `INSERT INTO {{users}} (nickname, username, password, status, position, department, role_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`;
+      const [result] = await fastify.db.execute(sql, [nickname, username, hashedPassword, status, position, department, role_id]);
       const userId = result.insertId;
-      // 2. 插入用户-角色表（写死超级管理员 role_id=1）
-      await fastify.db.execute('INSERT INTO zn_user_roles (user_id, role_id) VALUES (?, ?)', [userId, role_id]);
-
-      // 3. 插入用户-权限表（写死权限 id=[1,2,3,4]）
-      const permissionIds = [1, 2, 3, 4];
-      const values = permissionIds.map(pid => `(${userId}, ${pid})`).join(',');
-      await fastify.db.execute(`INSERT INTO zn_user_permissions (user_id, permission_id) VALUES ${values}`);
-      // 假设写数据库成功，返回结果
+      if (userId) {
+        // 假设写数据库成功，返回结果
+        return reply.send({
+          message: '用户创建成功',
+          data: {
+            userId,
+            username,
+            nickname,
+          },
+        });
+      }
       return reply.send({
-        message: '用户创建成功',
-        data: {
-          userId,
-          username,
-          nickname,
-        },
+        code: 400,
+        message: '用户创建失败',
+        data: null,
       });
-
     } catch(err) {
       fastify.log.error(`创建用户的catch捕捉错误 >>>>>>>>>>>>>>>>>>>>>${err}`);
       throw err;
@@ -99,15 +94,15 @@ async function userRoutes(fastify) {
   //  修改用户信息
   fastify.post('/updateUser', async function (request, reply) {
     try {
-      const { id, nickname, position, status, department, office_location } = request.body;
+      const { id, nickname, position, status, department, role_id } = request.body;
       if (!id) {
         return reply.send({ code: 400, message: '参数错误' })
       }
       const [result] = await fastify.db.execute(
-          `UPDATE zn_users
-           SET nickname = ?, \`position\` = ?, \`status\` = ?, department = ?, office_location = ?, updated_at = NOW()
+          `UPDATE {{users}}
+           SET nickname = ?, \`position\` = ?, \`status\` = ?, department = ?, role_id = ?, updated_at = NOW()
            WHERE id = ?`,
-          [nickname, position, status, department, office_location, id]
+          [nickname, position, status, department, role_id, id]
       );
       if (result.affectedRows > 0) {
         return reply.send({
@@ -132,14 +127,11 @@ async function userRoutes(fastify) {
     try {
       const { username, password } = request.body;
       if (!username || !password) {
-        // const err = new Error('用户名或者密码不能为空');
-        // err.statusCode = 400;
-        // throw err;
         return reply.send({ code: 400, message: '用户名或者密码不能为空'})
       }
 
       // 去 user 表查
-      const [rows] = await fastify.db.execute(`SELECT id, username, password, nickname FROM zn_users WHERE username = ?`, [username]);
+      const [rows] = await fastify.db.execute(`SELECT id, username, password, nickname FROM {{users}} WHERE username = ?`, [username]);
       if (rows.length === 0) {
         return reply.send({ code: 400, message: '用户不存在' })
       }
@@ -148,9 +140,6 @@ async function userRoutes(fastify) {
       //  验证密码
       const isValid = await fastify.verifyPassword(password, user.password);
       if (!isValid) {
-        // const err = new Error('密码错误');
-        // err.statusCode = 400;
-        // throw err;
         return reply.send({ code: 400, message: '密码错误' })
       }
 
@@ -185,15 +174,13 @@ async function userRoutes(fastify) {
               u.username,
               u.nickname,
               u.department,
-              u.office_location,
               u.position,
               u.status,
               r.id AS role_id,
               r.role_name,
               r.role_description
-          FROM zn_users u
-                   INNER JOIN zn_user_roles ur ON u.id = ur.user_id
-                   INNER JOIN zn_roles r ON ur.role_id = r.id
+          FROM {{users}} u
+                   INNER JOIN {{roles}} r ON u.role_id = r.id
           WHERE u.id = ?
 `, [userId]);
       const user = rows[0];
@@ -223,7 +210,7 @@ async function userRoutes(fastify) {
     try {
       const { userId, password } = request.body;
 
-      const [rows] = await fastify.db.execute(`SELECT username FROM zn_users WHERE id = ?`, [userId]);
+      const [rows] = await fastify.db.execute(`SELECT username FROM {{users}} WHERE id = ?`, [userId]);
 
       if (rows.length === 0) {
         return reply.send({ message: '参数错误' })
@@ -235,7 +222,7 @@ async function userRoutes(fastify) {
         const hashedPassword = await fastify.hashPassword(password);
 
         const [result] = await fastify.db.execute(
-            `UPDATE zn_users SET
+            `UPDATE {{users}} SET
                     password = ?,
                     updated_at = NOW()
                 WHERE id = ?`, [hashedPassword, userId]);

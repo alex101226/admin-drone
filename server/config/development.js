@@ -7,7 +7,7 @@ export default {
     user: 'root',
     password: 'root',
     host: '127.0.0.1',
-    database: 'zn_system',
+    database: 'drone',
   },
   jwt: {
     secret: 'o2v9WqV3hM8u7zYfHcPqR1s5lTgBj9DkXxN4d0K2SxA=',

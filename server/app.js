@@ -11,8 +11,8 @@ import replyPlugin from './plugins/reply.js'
 import hashPlugin from './plugins/hash.js'
 
 //  任务流
-import { registerTaskScanner } from './jobs/taskScanner.js';
-import { dispatchScanner } from './jobs/dispatchScanner.js';
+// import { registerTaskScanner } from './jobs/taskScanner.js';
+// import { dispatchScanner } from './jobs/dispatchScanner.js';
 
 const app = Fastify({ logger: true });
 
@@ -43,8 +43,8 @@ await app.register(dbPlugin);
 await app.register(replyPlugin);
 await app.register(hashPlugin, { saltRounds: 12 });
 
-registerTaskScanner(app);
-dispatchScanner(app);
+// registerTaskScanner(app);
+// dispatchScanner(app);
 
 export default app;
 
