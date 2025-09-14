@@ -1,22 +1,21 @@
 import fp from 'fastify-plugin';
-// import { verifyToken } from '../utils/jwt.js'
+import { verifyToken } from '../utils/jwt.js'
 
 async function replyPlugin(app) {
   /**
    *  添加token验证，noAuthPaths为不需要token验证的接口
    */
-  // app.addHook('onRequest', async (request, reply) => {
-  //   const noAuthPaths = [
-  //     '/api/login',
-  //     '/uploads',
-  //     '/api/getRoles',
-  //   ];
-  //
-  //   if (noAuthPaths.some(path => request.raw.url.startsWith(path))) return;
-  //
-  //   // 其他接口统一验证 token
-  //   await verifyToken(request, reply);
-  // });
+  app.addHook('onRequest', async (request, reply) => {
+    const noAuthPaths = [
+      '/api/login',
+      '/api/uploads',
+    ];
+
+    if (noAuthPaths.some(path => request.raw.url.startsWith(path))) return;
+
+    // 其他接口统一验证 token
+    await verifyToken(request, reply);
+  });
 
   /**
    * 接口返回数据封装

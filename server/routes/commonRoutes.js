@@ -72,7 +72,7 @@ async function commonRoutes(fastify) {
 
   //  查找所有的角色
   fastify.get('/getRoles', async (request, reply) => {
-    const [rows] = await fastify.db.execute('SELECT * FROM {{roles}}')
+    const [rows] = await fastify.db.execute('SELECT * FROM {{role}}')
     return reply.send({
       data: rows
     })
