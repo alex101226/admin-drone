@@ -1,28 +1,28 @@
-export default async function deviceRoutes(fastify) {
-  //  机巢查询
-  fastify.get('/getNests', async (request, reply) => {
+async function operatorRoutes(fastify) {
+  //  操控员查询
+  fastify.get('/getOperators', async (request, reply) => {
     try {
       const { page = 1, pageSize = 10 } = request.query;
-
       const offset = (page - 1) * pageSize;
+
       const limit = parseInt(pageSize, 10);
 
       // 统计总数
       const [[{ total }]] = await fastify.db.execute(
-          `SELECT COUNT(*) AS total FROM {{nest}}`
+          `SELECT COUNT(*) AS total FROM {{operator}}`
       );
 
       // 主查询
       const [rows] = await fastify.db.execute(
           `
               SELECT
-                  n.*,
+                  o.*,
                   d.dict_label AS status_label
-              FROM {{nest}} n
+              FROM {{operator}} o
   LEFT JOIN {{dict}} d
-              ON d.dict_type = 'nest_status'
-                  AND d.sort = n.status
-              ORDER BY n.created_at DESC
+              ON d.dict_type = 'operator_status'
+                  AND d.sort = o.status
+              ORDER BY o.created_at DESC
         LIMIT ${offset}, ${limit}
         `);
 
@@ -36,23 +36,22 @@ export default async function deviceRoutes(fastify) {
         },
       });
     } catch (err) {
-      fastify.log.error('查询机巢捕捉报错', err);
+      fastify.log.error('查询操控员捕捉报错', err);
       throw err;
     }
-  });
-
-  //  机巢添加
-  fastify.post('/addNest', async (request, reply) => {
+  })
+  //  新增操控员
+  fastify.post('/addOperator', async (request, reply) => {
     try {
-      const { nest_name, latitude, longitude, capacity, status } = request.body;
+      const { operator_name, phone, license_no, license_photo, status } = request.body;
 
-      const params = [nest_name, latitude, longitude, capacity, status]
-      const sql = `INSERT INTO {{nest}}
+      const params = [operator_name, phone, license_no, license_photo, status]
+      const sql = `INSERT INTO {{operator}}
     (
-        nest_name,
-        latitude,
-        longitude,
-        capacity,
+        operator_name,
+        phone,
+        license_no,
+        license_photo,
         status,
         created_at,
         updated_at
@@ -76,28 +75,28 @@ export default async function deviceRoutes(fastify) {
       fastify.log.error('机巢添加捕捉报错', err);
       throw err;
     }
-  });
-
-  //  机巢修改
-  fastify.post('/updateNest', async (request, reply) => {
-    const { nest_name, latitude, longitude, capacity, status, nest_id } = request.body;
-    if (!nest_id) {
+  })
+  //  修改操控员
+  fastify.post('/updateOperator', async (request, reply) => {
+    const { operator_name, phone, license_no, license_photo, status, operator_id } = request.body;
+    if (!operator_id) {
       return reply.send({code: 400, message: '参数错误'})
     }
     const [result] = await fastify.db.execute(`
-      UPDATE {{nest}} SET 
-      nest_name = ?,
-      latitude = ?,
-      longitude = ?,
-      capacity = ?,
-      status = ?,
-      updated_at = NOW()
-      WHERE id = ?
-    `, [nest_name, latitude, longitude, capacity, status, nest_id])
-    console.log('看下修改', result.affectedRows)
+      UPDATE {{operator}} SET
+          operator_name = ?,
+          phone = ?,
+          license_no = ?,
+          license_photo = ?,
+          status = ?,
+          updated_at = NOW()
+          WHERE id = ?
+    `, [operator_name, phone, license_no, license_photo, status, operator_id])
+
     if (result.affectedRows > 0) {
       return reply.send({ code: 0, message: '修改成功' })
     }
     return reply.send({ code: 400, message: '修改失败' })
   })
 }
+export default operatorRoutes;

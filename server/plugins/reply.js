@@ -8,7 +8,7 @@ async function replyPlugin(app) {
   app.addHook('onRequest', async (request, reply) => {
     const noAuthPaths = [
       '/api/login',
-      '/api/uploads',
+      '/uploads',
     ];
 
     if (noAuthPaths.some(path => request.raw.url.startsWith(path))) return;

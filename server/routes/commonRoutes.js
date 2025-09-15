@@ -12,9 +12,13 @@ async function commonRoutes(fastify) {
         return reply.status(400).send({ error: 'No file uploaded' })
       }
 
+      // 这里能拿到额外字段
+      const { fields } = data;
+      const extraName = fields?.name?.value;  // 这就是前端 append 的 name
+
       // 按日期创建目录，比如 2025/08/23
       const today = dayjs().format('YYYY/MM/DD')
-      const uploadDir = path.join(process.cwd(), 'uploads', today)
+      const uploadDir = path.join(process.cwd(), 'uploads', extraName, today)
 
       // 确保存储目录存在
       if (!fs.existsSync(uploadDir)) {
@@ -36,7 +40,7 @@ async function commonRoutes(fastify) {
       return reply.send({
         message: '上传成功',
         data: {
-          url: `/uploads/${today}/${newFilename}`, // 可作为访问路径
+          url: `/uploads/${extraName}/${today}/${newFilename}`, // 可作为访问路径
         },
       })
 
@@ -78,5 +82,17 @@ async function commonRoutes(fastify) {
     })
   })
 
+  //  查字典
+  fastify.get('/getDict', async (request, reply) => {
+    const {type} = request.query
+    if (!type) {
+      return reply.send({message: '参数错误', code: 400})
+    }
+    const [rows] = await fastify.db.execute('SELECT * FROM {{dict}} WHERE dict_type = ?', [type])
+    return reply.send({
+      code: 0,
+      data: rows
+    })
+  })
 }
 export default commonRoutes;
