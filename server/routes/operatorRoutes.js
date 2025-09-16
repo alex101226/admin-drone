@@ -5,8 +5,6 @@ async function operatorRoutes(fastify) {
       const { page = 1, pageSize = 10 } = request.query;
       const offset = (page - 1) * pageSize;
 
-      const limit = parseInt(pageSize, 10);
-
       // 统计总数
       const [[{ total }]] = await fastify.db.execute(
           `SELECT COUNT(*) AS total FROM {{operator}}`
@@ -23,7 +21,7 @@ async function operatorRoutes(fastify) {
               ON d.dict_type = 'operator_status'
                   AND d.sort = o.status
               ORDER BY o.created_at DESC
-        LIMIT ${offset}, ${limit}
+        LIMIT ${offset}, ${pageSize}
         `);
 
       return reply.send({

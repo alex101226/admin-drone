@@ -13,7 +13,9 @@ async function userRoutes(fastify) {
       const offset = (page - 1) * pageSize;
 
       // 查询总数
-      const [countRows] = await fastify.db.execute(`SELECT COUNT(*) as total FROM {{user}}`);
+      const [countRows] = await fastify.db.execute(`
+            SELECT COUNT(*) as total FROM {{user}} WHERE role_id = ?
+      `, [role_id]);
       const total = countRows[0].total;
       // 查询分页数据
       const [rows] = await fastify.db.execute(`
@@ -25,11 +27,13 @@ async function userRoutes(fastify) {
             u.position,
             u.department,
             u.created_at,
-            r.id as role_id,
+            u.role_id,
+            r.id,
             r.role_name,
             r.role_description
         FROM {{user}} u
-                 INNER JOIN {{roles}} r ON u.role_id = r.id
+                 INNER JOIN {{role}} r ON u.role_id = r.id
+                                       WHERE u.role_id = ?
         ORDER BY u.id DESC
             LIMIT ${pageSize} OFFSET ${offset}
     `, [Number(role_id)]);
@@ -246,120 +250,6 @@ async function userRoutes(fastify) {
     } catch(err) {
       fastify.log.error(`修改密码错误捕捉------>>>>>${err}`);
       throw err;
-    }
-  })
-
-  //  获取用户定位信息
-  fastify.get('/getUserTraffic', async function (request, reply) {
-    try {
-      const page = parseInt(request.query.page) || 1;
-      const pageSize = parseInt(request.query.pageSize) || 10;
-      const offset = (page - 1) * pageSize;
-      const [countRows] = await fastify.db.execute(`
-        SELECT COUNT(DISTINCT u.id) AS total
-            FROM zn_users u
-        JOIN zn_user_roles ur ON ur.user_id = u.id AND ur.role_id = 2`)
-      const total = countRows[0].total;
-
-      const sql = `
-          SELECT
-              u.id AS user_id,
-              u.nickname,
-              u.position,
-              u.department,
-              u.office_location,
-              l.latitude,
-              l.longitude,
-              l.location_text,
-              l.created_at AS location_time
-          FROM zn_users u
-                   JOIN zn_user_roles ur
-                        ON ur.user_id = u.id AND ur.role_id = 2
-                   LEFT JOIN (
-              SELECT l1.*
-              FROM zn_user_locations l1
-                       JOIN (
-                  SELECT user_id, MAX(created_at) AS max_created_at
-                  FROM zn_user_locations
-                  GROUP BY user_id
-              ) lm ON l1.user_id = lm.user_id AND l1.created_at = lm.max_created_at
-          ) l ON l.user_id = u.id
-          ORDER BY u.id ASC
-              LIMIT ${offset}, ${pageSize}`;
-
-      const [rows] = await fastify.db.execute(sql);
-
-      return reply.send({
-        code: 0,
-        data: {
-          data: rows,
-          page: page,
-          pageSize: pageSize,
-          total,
-          totalPages: Math.ceil(total / pageSize),
-        },
-      })
-    } catch(err) {
-      fastify.log.error('查询用户定位信息报错', err);
-      throw err;
-    }
-  });
-
-  //  获取用户定位->历史轨迹数据
-  fastify.get('/getUserTrafficHistory', async function (request, reply) {
-    const { user_id } = request.query;
-    if (!user_id) {
-      return reply.send({ code: 400, message: '用户id不能为空' })
-    }
-    const [rows] = await fastify.db.execute(`SELECT * FROM zn_user_locations as ur WHERE ur.user_id = ?`, [user_id]);
-    return reply.send({
-      code: 0,
-      data: rows,
-    })
-  })
-
-  //  一键定位
-  fastify.post('/postUsrTrafficPositon', async function (request, reply) {
-    const { user_id, latitude, longitude, location_text } = request.body;
-
-    if (!user_id) {
-      return reply.send({ code: 400, message: '用户不能为空' })
-    }
-
-    const [rows] = await fastify.db.execute(
-        `SELECT id FROM zn_user_locations WHERE user_id = ? ORDER BY created_at ASC`,
-        [user_id]
-    );
-    if (rows.length >= 5) {
-      const extra = rows.length - 4; // 要删掉的数量（保证插入后正好5条）
-      const idsToDelete = rows.slice(0, extra).map(r => r.id);
-
-      if (idsToDelete.length > 0) {
-        await fastify.db.execute(
-            `DELETE FROM zn_user_locations WHERE id IN (${idsToDelete.map(() => '?').join(',')})`,
-            idsToDelete
-        );
-      }
-    }
-
-    const sql = `INSERT INTO zn_user_locations (user_id, latitude, longitude, location_text, created_at)
-    VALUES (?, ?, ?, ?, NOW())`;
-
-    const [result] = await fastify.db.execute(sql, [user_id, latitude, longitude, location_text]);
-    if (result.affectedRows > 0) {
-      return reply.send({
-        code: 0,
-        message: '定位成功',
-        data: {
-          location: location_text,
-        }
-      })
-    } else {
-      return reply.send({
-        code: 400,
-        message: '定位失败',
-        data: null,
-      });
     }
   })
 }
