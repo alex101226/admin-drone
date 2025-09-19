@@ -1,3 +1,5 @@
+import { createKnexQuery } from '../utils/knexHelper.js'
+
 export default async function deviceRoutes(fastify) {
   //  机巢查询
   fastify.get('/getNests', async (request, reply) => {
@@ -104,28 +106,38 @@ export default async function deviceRoutes(fastify) {
   //  无人机查询
   fastify.get('/getDrones', async (request, reply) => {
     try {
-      const { page = 1, pageSize = 10 } = request.query;
-      const offset = (page - 1) * pageSize;
+      const { page = 1, pageSize = 10, name } = request.query;
 
-      const [[{total}]] = await fastify.db.execute(`SELECT COUNT(*) AS total FROM {{drone}}`)
-
-      const [rows] = await fastify.db.execute(`
-      SELECT dr.*,
-      d1.dict_label AS status_label,
-      d2.dict_label AS camera_label,
-      o.id,
-      o.operator_name
-      FROM {{drone}} dr
-      LEFT JOIN {{dict}} d1 ON d1.dict_type = 'drone_status' AND d1.sort = dr.status
-      LEFT JOIN {{dict}} d2 ON d2.dict_type = 'camera_model' AND d2.sort = dr.camera_specs
-      LEFT JOIN {{operator}} o ON dr.operator_id = o.id
-      ORDER BY dr.updated_at DESC
-      LIMIT ${offset}, ${pageSize}
-       `)
+      const [{ total }] = await createKnexQuery(fastify, 'drone', 'dr')
+          .count({ total: '*' })
+          .where('is_delete', '0')
+      const query = await createKnexQuery(fastify, 'drone', 'dr')
+          .select(
+              'dr.*',
+              'd1.dict_label as status_label',
+              'd2.dict_label as camera_label',
+              'o.id as operator_id',
+              'o.operator_name'
+          )
+          .addJoin('dict', 'd1', function() {
+            this.on('d1.dict_type', '=', fastify.knex.raw('?', ['drone_status']))
+                .andOn('d1.sort', '=', 'dr.status');
+          })
+          .addJoin('dict', 'd2', function() {
+            this.on('d2.dict_type', '=', fastify.knex.raw('?', ['camera_model']))
+                .andOn('d2.sort', '=', 'dr.camera_specs');
+          })
+          .addJoin('operator', 'o', function() {
+            this.on('dr.operator_id', '=', 'o.id')
+          })
+          .addCondition('o.id', name)
+          .addCondition('dr.is_delete', '0')
+          .addOrder('dr.created_at', 'desc')
+          .addPagination(page, pageSize);
 
       return reply.send({
         data: {
-          data: rows,
+          data: query,
           page: Number(page),
           pageSize: Number(pageSize),
           total,
@@ -225,5 +237,26 @@ export default async function deviceRoutes(fastify) {
       fastify.log.error('无人机添加捕捉错误', err)
       throw err;
     }
+  })
+
+  //  无人机删除
+  fastify.post('/deleteDrone', async (request, reply) => {
+    const { id } = request.body;
+    if (!id) {
+      return reply.send({
+        code: 400, message: '参数错误'
+      })
+    }
+
+    const [row] = await fastify.db.execute(`SELECT * FROM {{drone}} WHERE id = ?`, [id])
+    const drone = row[0]
+    if (!drone) {
+      return reply.send({ code: 400, message: '数据不存在' })
+    }
+    const [result] = await fastify.db.execute(`UPDATE {{drone}} SET is_delete = '1' WHERE id = ?`, [id])
+    if (result.affectedRows > 0) {
+      return reply.send({code: 0, message: '删除成功'})
+    }
+    return reply.send({code: 400, message: '删除失败'})
   })
 }
