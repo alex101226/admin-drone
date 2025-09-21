@@ -177,3 +177,4 @@ async function dispatchSingleVehicle(fastify, vehicle_id, batch_id) {
 }
 
 export { dispatchSingleVehicle };
+

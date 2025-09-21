@@ -155,20 +155,20 @@ export default async function deviceRoutes(fastify) {
     try {
       const {
         drone_name, drone_sn, model, status, battery_capacity,
-        payload_capacity, camera_specs, operator_id, drone_photo
+        payload_capacity, camera_specs, operator_id, drone_photo, latitude, longitude
       } = request.body;
       const params = [
         drone_name, drone_sn, model, status, battery_capacity,
-        payload_capacity, camera_specs, operator_id, drone_photo
+        payload_capacity, camera_specs, operator_id, drone_photo, latitude, longitude
       ]
 
       const sql = `INSERT INTO {{drone}}
        (
            drone_name, drone_sn, model, status, battery_capacity,
            payload_capacity, camera_specs, operator_id, drone_photo,
-           created_at, updated_at
+           created_at, updated_at, latitude, longitude
        )
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), ?, ?)
       `
       const [result] = await fastify.db.execute(sql, params)
 
@@ -197,7 +197,7 @@ export default async function deviceRoutes(fastify) {
       const {
         drone_name, drone_sn, model, status, battery_capacity,
         payload_capacity, camera_specs, operator_id, drone_photo,
-        id
+        id, latitude, longitude
       } = request.body;
 
       if (!id) {
@@ -205,7 +205,7 @@ export default async function deviceRoutes(fastify) {
       }
 
       const params = [drone_name, drone_sn, model, status, battery_capacity,
-        payload_capacity, camera_specs, operator_id, drone_photo, id
+        payload_capacity, camera_specs, operator_id, drone_photo, latitude, longitude, id
       ]
       const sql = `
         UPDATE {{drone}} SET
@@ -218,6 +218,8 @@ export default async function deviceRoutes(fastify) {
            camera_specs = ?,
            operator_id = ?,
            drone_photo = ?,
+           latitude = ?,
+           longitude = ?,
            updated_at = NOW()
         WHERE id = ?
         `

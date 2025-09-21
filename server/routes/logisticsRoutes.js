@@ -54,7 +54,7 @@ export default async function logisticsRoutes(fastify) {
   fastify.post('/postLogistics', async (request, reply) => {
     const trx = await fastify.knex.transaction();
     try {
-      const { route_name, status = '1', remark, points } = request.body
+      const { route_name, status = '1', remark, points, expect_complete_time } = request.body
 
       if (!points) {
         return reply.send({
@@ -65,7 +65,7 @@ export default async function logisticsRoutes(fastify) {
 
 
       const [routeId] = await createKnexQuery(fastify, 'route', '', trx)
-          .insert({route_name, remark, status, is_delete: '0'
+          .insert({route_name, remark, status, is_delete: '0', expect_complete_time
           });
 
       if (!routeId) {
@@ -101,7 +101,7 @@ export default async function logisticsRoutes(fastify) {
   fastify.post('/updateLogistics', async (request, reply) => {
     const trx = await fastify.knex.transaction();
     try {
-      const { routeId, route_name, remark, status = '1', points } = request.body
+      const { routeId, route_name, remark, status = '1', points, expect_complete_time } = request.body
       if (!routeId) {
         return reply.send({
           code: 400,
@@ -123,6 +123,7 @@ export default async function logisticsRoutes(fastify) {
             route_name,
             remark,
             status,
+            expect_complete_time,
             updated_at: fastify.knex.fn.now()
           });
 

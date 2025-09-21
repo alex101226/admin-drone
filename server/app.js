@@ -12,7 +12,7 @@ import hashPlugin from './plugins/hash.js'
 
 //  任务流
 // import { registerTaskScanner } from './jobs/taskScanner.js';
-// import { dispatchScanner } from './jobs/dispatchScanner.js';
+import { dispatchScanner } from './jobs/dispatchScanner.js';
 
 const app = Fastify({ logger: true });
 
@@ -44,7 +44,7 @@ await app.register(replyPlugin);
 await app.register(hashPlugin, { saltRounds: 12 });
 
 // registerTaskScanner(app);
-// dispatchScanner(app);
+dispatchScanner(app);
 
 export default app;
 

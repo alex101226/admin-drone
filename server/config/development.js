@@ -14,4 +14,5 @@ export default {
     expiresIn: '7d'
     // expiresIn: '1m'
   },
+  map_ak: 'UQVqyeuw2uCIjXTh1K89plxkH0aSkaEL',
 }

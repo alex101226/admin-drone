@@ -2,6 +2,8 @@ import fs from 'fs'
 import path from 'path'
 import dayjs from 'dayjs'
 import { pumpStreamToFile } from '../utils/pumpStreamToFile.js'
+import {createKnexQuery} from "../utils/knexHelper.js";
+import config from '../config/index.js'
 
 async function commonRoutes(fastify) {
   //  上传接口
@@ -51,29 +53,6 @@ async function commonRoutes(fastify) {
     }
   })
 
-  //  查找所有的司机数据
-  fastify.get('/getDriver', async (request, reply) => {
-    const [rows] = await fastify.db.execute('SELECT * FROM zn_drivers');
-    reply.send({
-      data: {
-        data: rows
-      }
-    });
-  })
-
-  //  查询所有的地址
-  fastify.get('/getLocations', async (request, reply) => {
-    const [rows] = await fastify.db.execute('SELECT * FROM zn_locations')
-    const [[{ total }]] = await fastify.db.execute('SELECT COUNT(*) AS total FROM zn_locations')
-
-    return reply.send({
-      data: {
-        data: rows,
-        total: total
-      }
-    })
-  })
-
   //  查找所有的角色
   fastify.get('/getRoles', async (request, reply) => {
     const [rows] = await fastify.db.execute('SELECT * FROM {{role}}')
@@ -93,6 +72,112 @@ async function commonRoutes(fastify) {
       code: 0,
       data: rows
     })
+  })
+
+  //  气象
+  fastify.get('/getWeather', async (request, reply) => {
+    const {city = '110100'} = request.query
+
+    const today = new Date().toISOString().slice(0, 10); // yyyy-mm-dd
+    // 查询今天的调用次数
+    const [stat] = await createKnexQuery(fastify, 'weather_call_stats', '')
+        .select('call_count')
+        .where('call_date', today)
+        .limit(1);
+    let callCount = stat ? stat.call_count : 0;
+
+    // ✅ 如果没超过 5000，就去调用 API
+    if (callCount < 5000) {
+      try {
+        const url = `https://api.map.baidu.com/weather/v1/?district_id=${city}&data_type=all&ak=${config.map_ak}`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.status !== 0) {
+          return reply.send({
+            code: 400,
+            message: `天气 API 调用失败: ${JSON.stringify(data)}`
+          });
+        }
+
+        const { location, now, forecasts, forecast_hours, indexes } = data.result;
+        const record = {
+          city_name: location.name,
+          district_id: location.id,
+          weather_text: now.text,
+          temperature: now.temp,
+          feels_like: now.feels_like,
+          humidity: now.rh,
+          wind_dir: now.wind_dir,
+          wind_class: now.wind_class,
+          aqi: now.aqi,
+          pm25: now.pm25,
+          pm10: now.pm10,
+          no2: now.no2,
+          so2: now.so2,
+          o3: now.o3,
+          co: now.co,
+          uptime: now.uptime,
+          pressure: now.pressure,
+          wind_angle: now.wind_angle,
+          uvi: now.uvi,
+          level: now.level,
+          title: now.title,
+          desc: now.desc,
+          vis: now.vis,
+          clouds: now.clouds,
+          forecast: JSON.stringify(forecasts),
+          forecast_hours: JSON.stringify(forecast_hours),
+          indexes: JSON.stringify(indexes),
+        };
+
+        // 存到 weather_history
+        await createKnexQuery(fastify, 'weather_history').insert(record);
+
+        // 更新调用次数表
+        await createKnexQuery(fastify, 'weather_call_stats')
+            .insert({
+              call_date: today,
+              call_count: 1,
+              updated_at: new Date()
+            })
+            .onConflict('call_date')
+            .merge({
+              call_count: fastify.knex.raw('call_count + 1'),
+              updated_at: new Date()
+            });
+
+        return reply.send({
+          code: 0,
+          data: record
+        });
+      } catch (err) {
+        console.error('请求失败:', err);
+        return reply.send({
+          code: 500,
+          message: '天气数据获取异常'
+        });
+      }
+    }
+
+    // 🚫 超过 5000 次，就返回数据库里最新的一条
+    const history = await createKnexQuery(fastify, 'weather_history', 'wh')
+        .select('wh.*')
+        .where('district_id', city)
+        .addOrder('updated_at', 'desc')
+        .limit(1);
+
+    if (history.length > 0) {
+      return reply.send({
+        code: 0,
+        data: history[0],
+      });
+    }
+
+    return reply.send({
+      code: 500,
+      message: '没有可用的天气数据'
+    });
   })
 }
 export default commonRoutes;
