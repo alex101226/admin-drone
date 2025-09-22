@@ -5,6 +5,58 @@ import { pumpStreamToFile } from '../utils/pumpStreamToFile.js'
 import {createKnexQuery} from "../utils/knexHelper.js";
 import config from '../config/index.js'
 
+//  站内信
+async function checkWeatherAndNotify(fastify, weather) {
+  const alerts = []
+
+  // 风力检查
+  const windLevel = Number((weather.wind_class || '').match(/\d+/)?.[0] || NaN)
+
+  if (!isNaN(windLevel) && windLevel >= 6) {
+    alerts.push(`当前风力为 ${weather.wind_class}，超过无人机安全飞行等级。`)
+  }
+
+  // 天气现象检查
+  if (weather.weather_text && /(雨|雪|冰雹|雷)/.test(weather.weather_text)) {
+    alerts.push(`当前天气为 ${weather.weather_text}，不适合无人机执行巡航任务。`)
+  }
+
+  // 能见度检查
+  if (weather.vis && weather.vis < 2000) {
+    alerts.push(`当前能见度仅 ${weather.vis} 米，低于安全飞行要求。`)
+  }
+
+  // 温度检查
+  if (weather.temperature && (weather.temperature > 40 || weather.temperature < -10)) {
+    alerts.push(`当前温度为 ${weather.temperature}℃，超出无人机工作温度范围。`)
+  }
+
+  // 空气质量检查
+  if (weather.aqi && weather.aqi >= 200) {
+    alerts.push(`当前空气质量指数为 ${weather.aqi}，空气污染严重，建议暂停任务。`)
+  }
+
+
+  // 如果有告警，插入站内信
+  if (alerts.length > 0) {
+    const content = alerts.join('\n')
+
+    const latest = await createKnexQuery(fastify, 'message')
+        .where({ type: 'weather' })
+        .andWhere('content', content)
+        .orderBy('created_at', 'desc')
+        .first()
+
+    if (!latest || (Date.now() - new Date(latest.created_at).getTime()) > 30 * 60 * 1000) {
+      await createKnexQuery(fastify, 'message').insert({
+        title: '天气预警：无人机任务暂停',
+        content,
+        type: 'weather',
+      })
+    }
+  }
+}
+
 async function commonRoutes(fastify) {
   //  上传接口
   fastify.post('/upload', async (request, reply) => {
@@ -102,7 +154,7 @@ async function commonRoutes(fastify) {
 
         const { location, now, forecasts, forecast_hours, indexes } = data.result;
         const record = {
-          city_name: location.name,
+          city_name: `${location.city}/${location.name}`,
           district_id: location.id,
           weather_text: now.text,
           temperature: now.temp,
@@ -133,6 +185,9 @@ async function commonRoutes(fastify) {
 
         // 存到 weather_history
         await createKnexQuery(fastify, 'weather_history').insert(record);
+
+        // 调用检查函数
+        await checkWeatherAndNotify(fastify, record)
 
         // 更新调用次数表
         await createKnexQuery(fastify, 'weather_call_stats')
@@ -168,6 +223,8 @@ async function commonRoutes(fastify) {
         .limit(1);
 
     if (history.length > 0) {
+      // 调用检查函数
+      await checkWeatherAndNotify(fastify, history[0])
       return reply.send({
         code: 0,
         data: history[0],
@@ -178,6 +235,55 @@ async function commonRoutes(fastify) {
       code: 500,
       message: '没有可用的天气数据'
     });
+  })
+
+  //  站内信
+  fastify.get('/getMessage', async (request, reply) => {
+    const [{total}] = await createKnexQuery(fastify, 'message')
+        .count({total: '*'})
+        .where('status', 0)
+
+    const query = await createKnexQuery(fastify, 'message')
+        .select('*')
+        .where('status', 0)
+
+    return reply.send({
+      data: {
+        total,
+        data: query
+      }
+    })
+  })
+
+  //  站内信已读
+  fastify.post('/readMessage', async (request, reply) => {
+    const { message_id } = request.body;
+    if (!message_id) {
+      return reply.send({ code: 400, message: '参数错误' })
+    }
+    const result = await createKnexQuery(fastify, 'message')
+        .update({ 'status': 1 })
+        .where('id', message_id)
+
+    if (result) {
+      return reply.send({
+        code: 0,
+        message: '操作成功'
+      })
+    }
+    return reply.send({
+      code: 400,
+      message: '操作失败'
+    })
+  })
+
+  //  无人机巡航区域
+  fastify.get('/getRegion', async (request, reply) => {
+    const query = await createKnexQuery(fastify, 'region')
+        .select('*')
+    return reply.send({
+      data: query
+    })
   })
 }
 export default commonRoutes;

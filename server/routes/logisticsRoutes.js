@@ -2,10 +2,26 @@ import { createKnexQuery } from '../utils/knexHelper.js'
 
 export default async function logisticsRoutes(fastify) {
 
+  //  线路选择查询
+  fastify.get('/getLocations', async (request, reply) => {
+    try {
+      const query = await createKnexQuery(fastify, 'route', '')
+          .select('*')
+          .where('is_delete', '0')
+
+      return reply.send({
+        data: query
+      });
+    } catch (err) {
+      fastify.log.error('查询路线捕捉报错', err);
+      throw err;
+    }
+  });
+
   //  查询路线数据
   fastify.get('/getLogistics', async (request, reply) => {
     try {
-      const { page = 1, pageSize = 10, name } = request.query;
+      const { page = 1, pageSize = 10, route_id } = request.query;
 
       // 统计总数
       const [{ total }] = await createKnexQuery(fastify, 'route', 'dr')
@@ -31,6 +47,7 @@ export default async function logisticsRoutes(fastify) {
             this.on('rp.route_id', '=', 'r.id')
           })
           .addCondition('r.is_delete', '0')
+          .addCondition('r.id', route_id)
           .groupBy('r.id')
           .addOrder('r.created_at', 'desc')
           .addPagination(page, pageSize);

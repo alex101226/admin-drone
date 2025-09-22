@@ -5,6 +5,7 @@ dayjs.extend(duration);
 
 import config from '../server/config/index.js';
 import { randomDate } from '../server/utils/date.js'
+import knex from "knex";
 
 // 生成带随机偏差的实际运行时间
 function getRealRunningTime(planTimeStr, deviationSeconds = 120) {
@@ -19,7 +20,7 @@ function getRealRunningTime(planTimeStr, deviationSeconds = 120) {
   return { realTimeStr: `${hours}:${minutes}:${seconds}`, realSeconds };
 }
 
-const taskNames = ['车辆路线', '车辆负载'];
+const taskNames = ['无人机路线', '无人机任务负载'];
 const userIds = [1, 4, 7];
 const NUM_TASKS = 20;
 
@@ -27,15 +28,27 @@ function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-const conn = await mysql.createConnection({
-  host: config.db.host,
-  port: config.db.port,
-  user: config.db.user,
-  password: config.db.password,
-  database: config.db.database,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
+// const conn = await mysql.createConnection({
+//   host: config.db.host,
+//   port: config.db.port,
+//   user: config.db.user,
+//   password: config.db.password,
+//   database: config.db.database,
+//   waitForConnections: true,
+//   connectionLimit: 10,
+//   queueLimit: 0,
+// });
+
+const conn = knex({
+  client: 'mysql2',
+  useNullAsDefault: true, // 避免一些 warning
+  connection: {
+    host: config.db.host,
+    port: config.db.port,
+    user: config.db.user,
+    password: config.db.password,
+    database: config.db.database,
+  }
 });
 
 async function generateTasks() {
@@ -69,12 +82,29 @@ async function generateTasks() {
       const startTime = dayjs(createdAt).add(randomInt(0, 10), 'minute').format('YYYY-MM-DD HH:mm:ss');
       const endTime = dayjs(startTime).add(planMinutes, 'minute').format('YYYY-MM-DD HH:mm:ss');
 
-      await conn.execute(
-          `INSERT INTO {{hashrate_task}}
-           (task_name, area, qos, nodes, gpu_number, cpu_number, plan_running_time, real_running_time, start_time, end_time, remark, status, user_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [taskName, area, qos, nodes, gpu_number, cpu_number, planTimeStr, realTimeStr, startTime, endTime, '任务', status, userId, dayjs(createdAt).format('YYYY-MM-DD HH:mm:ss')]
-      );
+      // await conn.execute(
+      //     `INSERT INTO dr_hashrate_task
+      //      (task_name, area, qos, nodes, gpu_number, cpu_number, plan_running_time, real_running_time, start_time, end_time, remark, status, user_id, created_at)
+      // VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      //     [taskName, area, qos, nodes, gpu_number, cpu_number, planTimeStr, realTimeStr, startTime, endTime, '任务', status, userId, dayjs(createdAt).format('YYYY-MM-DD HH:mm:ss')]
+      // );
+      await conn('dr_hashrate_task')
+          .insert({
+            task_name: taskName,
+            area,
+            qos,
+            nodes,
+            gpu_number,
+            cpu_number,
+            plan_running_time: planTimeStr,
+            real_running_time: realTimeStr,
+            start_time: startTime,
+            end_time: endTime,
+            remark: '任务',
+            status,
+            user_id: userId,
+            created_at: dayjs(createdAt).format('YYYY-MM-DD HH:mm:ss')
+          })
     }
 
     console.log(`✅ 成功插入 ${NUM_TASKS} 条任务数据`);
@@ -82,7 +112,7 @@ async function generateTasks() {
   } catch (err) {
     console.error('❌ 插入数据失败', err);
   }finally {
-    await conn.end();
+    await conn.destroy();
     console.log('生成完成！');
   }
 }

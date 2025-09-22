@@ -1,12 +1,44 @@
 import cron from 'node-cron';
-import { DateTime } from 'luxon';
-import { createKnexQuery } from '../utils/knexHelper.js'
-import {getRealRunningTime} from "../utils/date.js";
+
+
+/**
+ * 写入无人机飞行记录
+ * @param {object} trx - Knex 事务对象
+ * @param {number} taskId - 任务ID
+ * @param {number} droneId - 无人机ID
+ * @param operatorId - 飞手id
+ * @param {object} route - 路线信息（包含 expect_complete_time、distance 等）
+ */
+async function insertFlightLog(trx, taskId, droneId, operatorId, route) {
+  // 模拟飞行高度 50~300米
+  const altitude = Math.floor(Math.random() * 250 + 50);
+
+  // 根据路线预计完成时间计算速度
+  let durHours = parseFloat(route?.expect_complete_time);
+  if (!isFinite(durHours) || durHours <= 0) durHours = 1; // 回退 1 小时
+  const distance = route?.distance || 10; // 默认 10 km
+  const speed = distance * 1000 / (durHours * 3600); // m/s
+
+  // 事件类型随机：大部分为正常
+  const eventTypeOptions = [1,1,1,1,1,1,1,1,2,3,4];
+  const event_type = eventTypeOptions[Math.floor(Math.random() * eventTypeOptions.length)];
+
+  await trx('dr_flight_log').insert({
+    task_id: taskId,
+    drone_id: droneId,
+    altitude,
+    speed,
+    event_type,
+    created_at: trx.fn.now()
+  });
+}
+
+
 
 const MAX_RUNNING = 5;        // 并发运行上限
 const QUEUE_WAIT_MIN = 1;     // 排队至少等待 5 分钟才能启动
 /**
- * 车辆调度任务的定时器
+ * 无人机调度任务
  * @param {object} fastify - Fastify 实例 (包含 db 插件)
  * (* * * * * → 每分钟执行一次)
  * (*\/5 * * * * → 每 5 分钟执行一次)
@@ -42,8 +74,13 @@ export function dispatchScanner(fastify)  {
           current_is_used: '0',
           updated_at: trx.fn.now()
         });
-
         fastify.log.info(`[taskScanner] 任务 ${t.id} 到期，标记完成并释放路线 ${t.route_id}`);
+
+
+        const route = await trx('dr_route').where({ id: t.route_id }).first();
+        await insertFlightLog(trx, t.id, t.drone_id, t.operator_id, route);
+
+        fastify.log.info(`[taskScanner] 任务 ${t.id} 到期，标记完成并写入飞行记录`);
       }
 
       // -------------------------

@@ -1,3 +1,5 @@
+import {createKnexQuery} from "../utils/knexHelper.js";
+
 async function operatorRoutes(fastify) {
   //  操控员查询
   fastify.get('/getOperators', async (request, reply) => {
@@ -5,24 +7,54 @@ async function operatorRoutes(fastify) {
       const { page = 1, pageSize = 10 } = request.query;
       const offset = (page - 1) * pageSize;
 
-      // 统计总数
-      const [[{ total }]] = await fastify.db.execute(
-          `SELECT COUNT(*) AS total FROM {{operator}}`
-      );
+      const [{ total }] = await createKnexQuery(fastify, 'operator')
+          .count({ total: '*' })
 
-      // 主查询
-      const [rows] = await fastify.db.execute(
-          `
-              SELECT
-                  o.*,
-                  d.dict_label AS status_label
-              FROM {{operator}} o
-  LEFT JOIN {{dict}} d
-              ON d.dict_type = 'operator_status'
-                  AND d.sort = o.status
-              ORDER BY o.created_at DESC
-        LIMIT ${offset}, ${pageSize}
-        `);
+      // 1) 子查询：按 operator_id 汇总已完成任务的总秒数
+      const ftSubQuery = function() {
+        this
+            .select('operator_id')
+            .sum({ total_hours: fastify.knex.raw('ROUND(TIMESTAMPDIFF(SECOND, start_time, end_time) / 3600, 2)') })
+            .from('dr_flight_task')
+            .where('status', 3) // 已完成
+            .groupBy('operator_id')
+            .as('ft');
+      };
+
+      // 2) 主查询：operator 左联 字典 + 子查询
+      const rows = await fastify.knex('dr_operator as o')
+          .leftJoin('dr_dict as d', function() {
+            this.on('d.dict_type', '=', fastify.knex.raw('?', ['operator_status']))
+                .andOn('d.sort', '=', 'o.status');
+          })
+          .leftJoin(ftSubQuery, 'ft.operator_id', 'o.id')
+          .select(
+              'o.*',
+              'd.dict_label as status_label',
+              fastify.knex.raw('COALESCE(ft.total_hours, 0) as total_hours')
+          )
+          .orderBy('o.created_at', 'desc')
+          .limit(pageSize)
+          .offset(offset);
+
+      // 4) 把 total_seconds 转成更友好的格式返回
+      function formatSecondsToHMS(sec) {
+        sec = Number(sec) || 0;
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = sec % 60;
+        return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      }
+
+      const result = rows.map(r => {
+        const totalSeconds = Number(r.total_seconds || 0);
+        return {
+          ...r,
+          total_seconds: totalSeconds, // 原始秒数
+          total_hours: (totalSeconds / 3600).toFixed(2), // 小时，保留 2 位小数
+          total_time_hms: formatSecondsToHMS(totalSeconds) // hh:mm:ss
+        }
+      });
 
       return reply.send({
         data: {

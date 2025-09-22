@@ -49,7 +49,6 @@ async function dbPlugin(fastify, options) {
   })
 
   fastify.decorate('knexTable', fastify.knex);
-
 }
 
 export default fastifyPlugin(dbPlugin);

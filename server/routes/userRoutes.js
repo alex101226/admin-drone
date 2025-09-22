@@ -2,10 +2,6 @@ import { generateToken } from '../utils/jwt.js';
 
 async function userRoutes(fastify) {
 
-  // fastify.get('/', function (request, reply) {
-  //   reply.send({ info: 'world' })
-  // })
-
   //  获取所有的用户信息列表
   fastify.get('/getUser', async function (request, reply) {
     try {

@@ -261,4 +261,66 @@ export default async function deviceRoutes(fastify) {
     }
     return reply.send({code: 400, message: '删除失败'})
   })
+
+  //  无人机历史飞行记录员
+  fastify.get('/droneHistory', async (request, reply) => {
+    const {page = 1, pageSize = 10, droneId, operatorId} = request.query;
+
+    // 1️⃣ 主查询
+    const query = await createKnexQuery(fastify, 'flight_log', 'fl')
+        .addJoin('flight_task', 't', function () {
+          this.on('fl.task_id', '=', 't.id');
+        })
+        .addJoin('route', 'r', function () {
+          this.on('t.route_id', '=', 'r.id');
+        })
+        .addJoin('operator', 'o', function () {
+          this.on('t.operator_id', '=', 'o.id');
+        })
+        .addJoin('dict', 'd', function() {
+          this.on('d.dict_type', '=', fastify.knex.raw('?', ['flight_event']))
+              .andOn('d.sort', '=', 'fl.event_type');
+        })
+        .select(
+            'fl.id as flight_log_id',
+            'fl.altitude',
+            'fl.speed',
+            'd.dict_label as event_label',
+            't.id as task_id',
+            't.start_time',
+            't.end_time',
+            'r.route_name',
+            'o.id as operator_id',
+            'o.operator_name'
+        )
+        .modify((qb) => {
+          if (droneId) qb.where('fl.drone_id', droneId);
+          if (operatorId) qb.where('t.operator_id', operatorId);
+        })
+        .addOrder('t.start_time', 'desc')
+        .addPagination(Number(page), Number(pageSize));
+
+    // 2️⃣ 统计总数
+    const [{ total }] = await createKnexQuery(fastify, 'flight_log', 'fl')
+        .addJoin('flight_task', 't', function () {
+          this.on('fl.task_id', '=', 't.id');
+        })
+        .modify((qb) => {
+          if (droneId) qb.where('fl.drone_id', droneId);
+          if (operatorId) qb.where('t.operator_id', operatorId);
+        })
+        .count({ total: '*' });
+
+    // 3️⃣ 返回结果
+    return reply.send({
+      data: {
+        data: query,
+        page: Number(page),
+        pageSize: Number(pageSize),
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    });
+  });
+
 }
