@@ -108,9 +108,11 @@ export default async function deviceRoutes(fastify) {
     try {
       const { page = 1, pageSize = 10, name } = request.query;
 
-      const [{ total }] = await createKnexQuery(fastify, 'drone', 'dr')
+      const [{ total }] = await createKnexQuery(fastify, 'drone')
           .count({ total: '*' })
           .where('is_delete', '0')
+          .addCondition('operator_id', name)
+
       const query = await createKnexQuery(fastify, 'drone', 'dr')
           .select(
               'dr.*',
@@ -130,7 +132,7 @@ export default async function deviceRoutes(fastify) {
           .addJoin('operator', 'o', function() {
             this.on('dr.operator_id', '=', 'o.id')
           })
-          .addCondition('o.id', name)
+          .addCondition('dr.operator_id', name)
           .addCondition('dr.is_delete', '0')
           .addOrder('dr.created_at', 'desc')
           .addPagination(page, pageSize);

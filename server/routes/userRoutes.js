@@ -1,44 +1,38 @@
 import { generateToken } from '../utils/jwt.js';
+import {createKnexQuery} from "../utils/knexHelper.js";
 
 async function userRoutes(fastify) {
 
   //  获取所有的用户信息列表
   fastify.get('/getUser', async function (request, reply) {
     try {
-      const { page = 1, pageSize = 10, role_id = 2 } = request.query;
-      const offset = (page - 1) * pageSize;
+      const { page = 1, pageSize = 10, role_id } = request.query;
+
+      const query = await createKnexQuery(fastify, 'user', 'u')
+          .select(
+              'u.*',
+              'r.id as role',
+              'r.role_name',
+              'r.role_description'
+          )
+          .addJoin('role', 'r', function () {
+            this.on('r.id', 'u.role_id');
+          })
+          .addCondition('u.role_id', role_id)
+          .addOrder('u.created_at', 'desc')
+          .addPagination(Number(page), Number(pageSize));
 
       // 查询总数
-      const [countRows] = await fastify.db.execute(`
-            SELECT COUNT(*) as total FROM {{user}} WHERE role_id = ?
-      `, [role_id]);
-      const total = countRows[0].total;
-      // 查询分页数据
-      const [rows] = await fastify.db.execute(`
-        SELECT
-            u.id,
-            u.username,
-            u.nickname,
-            u.status,
-            u.position,
-            u.department,
-            u.created_at,
-            u.role_id,
-            r.id,
-            r.role_name,
-            r.role_description
-        FROM {{user}} u
-                 INNER JOIN {{role}} r ON u.role_id = r.id
-                                       WHERE u.role_id = ?
-        ORDER BY u.id DESC
-            LIMIT ${pageSize} OFFSET ${offset}
-    `, [Number(role_id)]);
+      const [{ total }] = await createKnexQuery(fastify, 'user')
+          .count({ total: '*' })
+          .addCondition('role_id', role_id);
+
       reply.send({
         data: {
-          data: rows,
+          data: query,
           page: Number(page),
           pageSize: Number(pageSize),
-          total,
+          total: total,
           totalPages: Math.ceil(total / pageSize),
         },
       })

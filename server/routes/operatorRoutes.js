@@ -70,6 +70,7 @@ async function operatorRoutes(fastify) {
       throw err;
     }
   })
+
   //  新增操控员
   fastify.post('/addOperator', async (request, reply) => {
     try {
@@ -106,6 +107,7 @@ async function operatorRoutes(fastify) {
       throw err;
     }
   })
+
   //  修改操控员
   fastify.post('/updateOperator', async (request, reply) => {
     const { operator_name, phone, license_no, license_photo, status, operator_id } = request.body;

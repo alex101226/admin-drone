@@ -73,7 +73,7 @@ export default async function logisticsRoutes(fastify) {
     try {
       const { route_name, status = '1', remark, points, expect_complete_time } = request.body
 
-      if (!points) {
+      if (points.length === 0) {
         return reply.send({
           code: 400,
           message: '路线不存在'

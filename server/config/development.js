@@ -1,6 +1,6 @@
 //  开发环境
 export default {
-  port: 3000,
+  port: 4000,
   host: '127.0.0.1',
   db: {
     port: 3306,
