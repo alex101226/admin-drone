@@ -71,7 +71,7 @@ export default async function logisticsRoutes(fastify) {
   fastify.post('/postLogistics', async (request, reply) => {
     const trx = await fastify.knex.transaction();
     try {
-      const { route_name, status = '1', remark, points, expect_complete_time } = request.body
+      const { route_name, status = '1', remark, points, expect_complete_time, area } = request.body
 
       if (points.length === 0) {
         return reply.send({
@@ -82,7 +82,7 @@ export default async function logisticsRoutes(fastify) {
 
 
       const [routeId] = await createKnexQuery(fastify, 'route', '', trx)
-          .insert({route_name, remark, status, is_delete: '0', expect_complete_time
+          .insert({route_name, remark, status, is_delete: '0', expect_complete_time, area
           });
 
       if (!routeId) {
@@ -118,7 +118,7 @@ export default async function logisticsRoutes(fastify) {
   fastify.post('/updateLogistics', async (request, reply) => {
     const trx = await fastify.knex.transaction();
     try {
-      const { routeId, route_name, remark, status = '1', points, expect_complete_time } = request.body
+      const { routeId, route_name, remark, status = '1', points, expect_complete_time, area } = request.body
       if (!routeId) {
         return reply.send({
           code: 400,
@@ -141,6 +141,7 @@ export default async function logisticsRoutes(fastify) {
             remark,
             status,
             expect_complete_time,
+            area,
             updated_at: fastify.knex.fn.now()
           });
 
@@ -169,5 +170,58 @@ export default async function logisticsRoutes(fastify) {
       await trx.rollback();
       throw err;
     }
+  })
+
+  //  获取可选区域  available
+  fastify.get('/availableArea', async (request, reply) => {
+    const { page = 1, pageSize = 10 } = request.query;
+    const [{ total }] = await createKnexQuery(fastify, 'area', '')
+        .count({ total: '*' })
+
+    const query = await createKnexQuery(fastify, 'area', '')
+        .select('*')
+        .addPagination(page, pageSize)
+
+    return reply.send({
+      data: {
+        data: query,
+        page: Number(page),
+        pageSize: Number(pageSize),
+        totalPages: Math.ceil(total / pageSize),
+        total,
+      }
+    })
+  })
+
+  //  区域添加
+  fastify.post('/addArea', async (request, reply) => {
+    try {
+      const { zone_name, center_lng, center_lat, radius } = request.body;
+
+      const [areaId] = await createKnexQuery(fastify, 'area')
+          .insert({
+            zone_name,
+            center_lng,
+            center_lat,
+            radius,
+            created_at: fastify.knex.fn.now(),
+            updated_at: fastify.knex.fn.now(),
+          })
+
+      if (!areaId) {
+        return reply.send({
+          code: 400,
+          message: '添加失败'
+        })
+      }
+      return reply.send({
+        code: 0,
+        message: '添加成功'
+      })
+
+    } catch (e) {
+
+    }
+
   })
 }

@@ -10,27 +10,26 @@ export default async function deviceRoutes(fastify) {
       const limit = parseInt(pageSize, 10);
 
       // 统计总数
-      const [[{ total }]] = await fastify.db.execute(
-          `SELECT COUNT(*) AS total FROM {{nest}}`
-      );
+      const [{ total }] = await createKnexQuery(fastify, 'nest')
+          .count({total: '*'})
 
       // 主查询
-      const [rows] = await fastify.db.execute(
-          `
-              SELECT
-                  n.*,
-                  d.dict_label AS status_label
-              FROM {{nest}} n
-  LEFT JOIN {{dict}} d
-              ON d.dict_type = 'nest_status'
-                  AND d.sort = n.status
-              ORDER BY n.created_at DESC
-        LIMIT ${offset}, ${limit}
-        `);
-
+      const query = await createKnexQuery(fastify, 'nest', 'n')
+          .select(
+              'n.*',
+              'ar.zone_name',
+              'ar.center_lng',
+              'ar.center_lat',
+              'ar.radius'
+          )
+          .addJoin('area', 'ar', function() {
+            this.on('ar.id', '=', 'n.area')
+          })
+          .addPagination(page, pageSize)
+          .addOrder('created_at', 'desc')
       return reply.send({
         data: {
-          data: rows,
+          data: query,
           page: Number(page),
           pageSize: Number(pageSize),
           total,
@@ -46,25 +45,20 @@ export default async function deviceRoutes(fastify) {
   //  机巢添加
   fastify.post('/addNest', async (request, reply) => {
     try {
-      const { nest_name, latitude, longitude, capacity, status } = request.body;
+      const { nest_name, latitude, longitude, capacity, status, area } = request.body;
 
-      const params = [nest_name, latitude, longitude, capacity, status]
-      const sql = `INSERT INTO {{nest}}
-    (
-        nest_name,
-        latitude,
-        longitude,
-        capacity,
-        status,
-        created_at,
-        updated_at
-    ) VALUES (?, ?, ?, ?, ?, NOW(), NOW())`
-
-      // 写入
-      const [result] = await fastify.db.execute(sql, params);
-
-      const fenceId = result.insertId
-      if (!fenceId) {
+      const [nestId] = await createKnexQuery(fastify, 'nest')
+          .insert({
+            nest_name,
+            latitude,
+            longitude,
+            capacity,
+            status,
+            area,
+            created_at: fastify.knex.fn.now(),
+            updated_at: fastify.knex.fn.now(),
+          })
+      if (!nestId) {
         return reply.send({
           code: 400,
           message: '添加失败'
@@ -82,22 +76,24 @@ export default async function deviceRoutes(fastify) {
 
   //  机巢修改
   fastify.post('/updateNest', async (request, reply) => {
-    const { nest_name, latitude, longitude, capacity, status, nest_id } = request.body;
+    const { nest_name, latitude, longitude, capacity, status, nest_id, area } = request.body;
     if (!nest_id) {
       return reply.send({code: 400, message: '参数错误'})
     }
-    const [result] = await fastify.db.execute(`
-      UPDATE {{nest}} SET 
-      nest_name = ?,
-      latitude = ?,
-      longitude = ?,
-      capacity = ?,
-      status = ?,
-      updated_at = NOW()
-      WHERE id = ?
-    `, [nest_name, latitude, longitude, capacity, status, nest_id])
-    console.log('看下修改', result.affectedRows)
-    if (result.affectedRows > 0) {
+
+    const result = await createKnexQuery(fastify, 'nest')
+        .where('id', nest_id)
+        .update({
+          nest_name,
+          latitude,
+          longitude,
+          capacity,
+          status,
+          area,
+          updated_at: fastify.knex.fn.now(),
+        })
+
+    if (result) {
       return reply.send({ code: 0, message: '修改成功' })
     }
     return reply.send({ code: 400, message: '修改失败' })
