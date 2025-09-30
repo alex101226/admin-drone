@@ -6,12 +6,16 @@
     "start:prod": "NODE_ENV=production node ./server/index.js",
     "task:dev": "NODE_ENV=development node ./generates/generateTasks.js",
     "anti:dev": "NODE_ENV=development node ./generates/generateAnti.js",
-    "vehicle:dev": "NODE_ENV=development node ./generates/generateVehicles.js",
-    "fence:dev": "NODE_ENV=development node ./generates/generateFences.js",
+    "dict:dev": "NODE_ENV=development node ./generates/generateDict.js",
+    "region:dev": "NODE_ENV=development node ./generates/generateRegion.js",
+    "role:dev": "NODE_ENV=development node ./generates/generateRole.js",
+    "user:dev": "NODE_ENV=development node ./generates/generateUser.js",
     "task:prod": "NODE_ENV=production node ./generates/generateTasks.js",
     "anti:prod": "NODE_ENV=production node ./generates/generateAnti.js",
-    "vehicle:prod": "NODE_ENV=production node ./generates/generateVehicles.js",
-    "fence:prod": "NODE_ENV=production node ./generates/generateFences.js"
+    "dict:prod": "NODE_ENV=production node ./generates/generateDict.js",
+    "region:prod": "NODE_ENV=production node ./generates/generateRegion.js",
+    "role:prod": "NODE_ENV=production node ./generates/generateRole.js",
+    "user:prod": "NODE_ENV=production node ./generates/generateUser.js"
   },
   "dependencies": {
     "@fastify/cors": "^11.1.0",

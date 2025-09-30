@@ -1,11 +1,11 @@
-import mysql from 'mysql2/promise';
+//  生成算力任务
+import knex from "knex";
 import dayjs from 'dayjs';
 import duration from 'dayjs/plugin/duration.js';
 dayjs.extend(duration);
 
 import config from '../server/config/index.js';
 import { randomDate } from '../server/utils/date.js'
-import knex from "knex";
 
 // 生成带随机偏差的实际运行时间
 function getRealRunningTime(planTimeStr, deviationSeconds = 120) {
@@ -27,17 +27,6 @@ const NUM_TASKS = 20;
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
-
-// const conn = await mysql.createConnection({
-//   host: config.db.host,
-//   port: config.db.port,
-//   user: config.db.user,
-//   password: config.db.password,
-//   database: config.db.database,
-//   waitForConnections: true,
-//   connectionLimit: 10,
-//   queueLimit: 0,
-// });
 
 const conn = knex({
   client: 'mysql2',
@@ -82,12 +71,6 @@ async function generateTasks() {
       const startTime = dayjs(createdAt).add(randomInt(0, 10), 'minute').format('YYYY-MM-DD HH:mm:ss');
       const endTime = dayjs(startTime).add(planMinutes, 'minute').format('YYYY-MM-DD HH:mm:ss');
 
-      // await conn.execute(
-      //     `INSERT INTO dr_hashrate_task
-      //      (task_name, area, qos, nodes, gpu_number, cpu_number, plan_running_time, real_running_time, start_time, end_time, remark, status, user_id, created_at)
-      // VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      //     [taskName, area, qos, nodes, gpu_number, cpu_number, planTimeStr, realTimeStr, startTime, endTime, '任务', status, userId, dayjs(createdAt).format('YYYY-MM-DD HH:mm:ss')]
-      // );
       await conn('dr_hashrate_task')
           .insert({
             task_name: taskName,
